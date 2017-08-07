@@ -1,0 +1,4 @@
+Preparing scala script for spark submit:
+http://data-flair.training/blogs/create-spark-scala-project/
+cronsetup:
+/opt/installs/spark-2.1.0-bin-hadoop2.7/bin/spark-submit --conf spark.network.timeout=100000000 --class usertagging.tag --driver-java-options "-Dlog4j.configuration=file:/home/chetan.arya/usertagging/log4j_driver.properties" --conf "spark.executor.extraJavaOptions=-Dlog4j.configuration=file:/home/chetan.arya/usertagging/log4j_executer.properties"  --master spark://toimisc42139:7077 --packages datastax:spark-cassandra-connector:2.0.0-RC1-s_2.11 --driver-memory 40G --num-executors 17 --executor-cores 5 --executor-memory 19G --conf spark.executor.heartbeatInterval=10000000 /home/chetan.arya/usertagging/usertagging.jar
