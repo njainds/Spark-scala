@@ -1,0 +1,4 @@
+-Preparing scala script for spark submit:
+-http://data-flair.training/blogs/create-spark-scala-project/
+-cronsetup:
+31 09 * * * export JAVA_HOME=/opt/installs/jdk1.8.0_121 && /opt/installs/spark-2.0.0-bin-hadoop2.6/bin/spark-submit --conf spark.network.timeout=100000000 --class CokeSegment.CokeSegmentProfile --driver-java-options "-Dlog4j.configuration=file:/home/chetan.arya/cokesegmentprofile/log4j_driver.properties" --conf "spark.executor.extraJavaOptions=-Dlog4j.configuration=file:/home/chetan.arya/cokesegmentprofile/log4j_executer.properties"  --master spark://dsciapp43104:7077 --packages datastax:spark-cassandra-connector:2.0.0-RC1-s_2.11 --driver-memory 10G --num-executors 2 --executor-cores 5 --executor-memory 15G --conf spark.executor.heartbeatInterval=10000000 /home/chetan.arya/cokesegmentprofile/CokeSegmentProfile.jar
