@@ -1,0 +1,286 @@
+SPark-Cassandra setup
+
+1. https://github.com/datastax/spark-cassandra-connector/blob/master/doc/15_python.md
+   https://github.com/datastax/spark-cassandra-connector
+spark-shell supports connection with cassandra-connector/blob/master/doc/15_python
+Using pyspark, it has limitation to dataframe only operation
+
+spark-shell, pyspark, or spark-submit
+
+> $SPARK_HOME/bin/spark-shell --packages datastax:spark-cassandra-connector:2.0.0-RC1-s_2.10 
+
+downoad the zip or jar of package and store in SPARK_HOME
+
+2. https://github.com/TargetHolding/pyspark-cassandra#using-with-pyspark
+PySpark Cassandra is no longer maintained. Development effort has moved away from Spark to pure Python environment
+This module provides python support for Apache Spark's Resillient Distributed Datasets from Apache Cassandra CQL rows using Cassandra Spark Connector within PySpark, both in the interactive shell and in python programmes submitted with spark-submit.
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+A Tale of Three Apache Spark APIs: RDDs, DataFrames, and Datasets
+When to use them and why
+https://databricks.com/blog/2016/07/14/a-tale-of-three-apache-spark-apis-rdds-dataframes-and-datasets.html
+http://www.kdnuggets.com/2016/02/apache-spark-rdd-dataframe-dataset.html
+
+RDDs: Very basic, old (since version 1 of spark)
+At the core, an RDD is an immutable distributed collection of elements of your data, partitioned across nodes in your cluster that can be operated in parallel with a low-level API that offers transformations and actions.
+
+DataFrames
+Like an RDD, a DataFrame is an immutable distributed collection of data. Unlike an RDD, data is organized into named columns, like a table in a relational database. Designed to make large data sets processing even easier, DataFrame allows developers to impose a structure onto a distributed collection of data, allowing higher-level abstraction; 
+
+DataFrame provides more speed and scalability compared to RDDs.
+the choice of when to use RDD or DataFrame and/or Dataset seems obvious. While the former offers you low-level functionality and control, the latter allows custom view and structure, offers high-level and domain specific operations, saves space, and executes at superior speeds
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+cqlsh shell to create and query cassandra tables:
+https://docs.datastax.com/en/cql/3.3/cql/cql_reference/cqlsh.html
+cd Downloads/spark-2.1.0-bin-hadoop2.7/spark-2.1.0-bin-hadoop2.7/bin
+spark-shell --jars ~/spark-cassandra-connector/target/scala-2.10/spark-cassandr‌​a-connector_2.10-1.2‌​.0-SNAPSHOT.jar --packages com.datastax.spark:spark-cassandra-connector:1.6.0-s_2.10
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+Installing spark on 137:
+http://data-flair.training/blogs/install-configure-run-apache-spark-2-x-single-node/
+
+sample jon submit to test spark installation:
+$SPARK_HOME/bin/spark-submit --class org.apache.spark.examples.SparkPi  --executor-memory 1G --total-executor-cores 1 /opt/installs/spark-2.0.0-bin-hadoop2.6/examples/jars/spark-examples_2.11-2.0.0.jar 10
+
+
+creating sample data in cassandra:
+./cqlsh toimisc42142
+cqlsh> CREATE KEYSPACE nj_test WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1 };
+cqlsh> CREATE TABLE test.kv(key text PRIMARY KEY, value int);
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+connecting spark to cassandra:
+
+$SPARK_HOME/bin/spark-shell --conf spark.cassandra.connection.host=toimisc42142 --packages datastax:spark-cassandra-connector:2.0.0-RC1-s_2.11
+	import com.datastax.spark.connector._
+	val rdd = sc.cassandraTable("nj_test", "kv")
+println(rdd.count)
+println(rdd.first)
+println(rdd.map(_.getInt("value")).sum)
+rdd.collect().foreach(println)
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Reading a text file in Spark-shell:
+val myfile = "/home/nitin.jain/Salary.txt"
+val sal= sc.textFile(myfile) 
+case class Data(empId: Int, group: String, salary: Int)
+val saldf=sal.map(x=>x.split("\t")).collect{case Array(empId,group,salary)=>Data(empId.toInt,group,salary.toInt)}
+import sqlContext.implicits._
+val saldf2=saldf.toDF()
+saldf2.show()
+val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+saldf2.registerTempTable("salaries")
+sqlContext.sql("select group, count(*) as count from salaries group by group").show()
+val collection = sc.parallelize(Seq(("key11", 11), ("key12", 12)))
+collection.saveToCassandra("nj_test", "kv", SomeColumns("key", "value"))
+  
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+  
+#Reading data from cassandra into spark dataframe  
+val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+val df = sqlContext.read.format("org.apache.spark.sql.cassandra").options(Map( "table" -> events, "keyspace" -> mobiledata)).load()  
+Not able to do so
+  
+#Reading data from cassandra into Pyspark dataframe   
+Complete guide: http://rustyrazorblade.com/2015/07/cassandra-pyspark-dataframes-revisted/
+
+$SPARK_HOME/bin/pyspark --conf spark.cassandra.connection.host=toimisc42142 --packages datastax:spark-cassandra-connector:2.0.0-RC1-s_2.11
+  
+from pyspark.sql import SQLContext
+sql = SQLContext(sc)
+user = sql.read.format("org.apache.spark.sql.cassandra").load(keyspace="mobiledata", table="events")
+----user is a data frame-----
+adults = user.where(user.uid==920910)
+We can register a DataFrame as a temporary table, which allows us to perform SQL on it.
+user.registerTempTable("user")
+sql.sql("SELECT * from user where user.uid=13498003")
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+-For pyspark/spark & Cassandra: 2 links
+https://github.com/datastax/spark-cassandra-connector
+http://rustyrazorblade.com/2015/07/cassandra-pyspark-dataframes-revisted/
+-For learning spark and pyspark:
+http://spark.apache.org/docs/latest/api/python/pyspark.html
+http://spark.apache.org/docs/latest/quick-start.html
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+Understanding RDDs:
+http://stackoverflow.com/questions/28981359/why-do-we-need-to-call-cache-or-persist-on-a-rdd
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+Cache() Vs. Persist?
+Note that cache() is an alias for persist(StorageLevel.MEMORY_ONLY) which may not be ideal for datasets larger than available cluster memory. Each RDD partition that is evicted out of memory will need to be rebuilt from source (ie. HDFS, Network, etc) which is expensive.
+A better solution would be to use persist(StorageLevel.MEMORY_AND_DISK_ONLY) which will spill the RDD partitions to the Worker's local disk if they're evicted from memory. In this case, rebuilding a partition only requires pulling data from the Worker's local disk which is relatively fast
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+Testing done on pyspark on 137 with cassandra on 3 nodes:
+>>> from pyspark.sql.functions import *
+>>> np.agg(countDistinct(np.uid)).collect()
+>>> samplenp=np.filter(np.uid==921910)
+>>> samplenp.cache
+>>> samplenp.take(1)
+>>> def f(p):
+...  return p.aurl.substr(1,3)
+... 
+>>> samplenp.rdd.map(lambda p: f(p)).collect()
+>>> samplenp.select('uid','mevent',(samplenp.dataused*10).alias('dataused2')).limit(2).collect()
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+Issues while accessing cassandra on 2 node from pyspark on .137:
+
+1. whole data for 1st Mar (41 mn rows), cannot read as read timeput error
+2. only np data filtered out and cached:
+np.distinct().count()- count od distinct rows fails show (error-java-lang-outofmemoryerror-gc-overhead-limit-exceeded)
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+Testing done on pyspark on 137 with cassandra on 5 nodes:
+Feb data:
+$SPARK_HOME/bin/pyspark --conf spark.cassandra.connection.host=dsciapp43100 --packages datastax:spark-cassandra-connector:2.0.0-RC1-s_2.11
+
+np.agg(countDistinct(np.uid)).collect()
+1886475
+np.count()
+73498720
+np.agg(min(np.timestamp)).collect()
+[Row(min(timestamp)=datetime.datetime(2017, 2, 1, 0, 0, 0, 338000))]
+np.agg(max(np.timestamp)).collect()
+[Row(max(timestamp)=datetime.datetime(2017, 3, 1, 0, 2, 59, 628000))]
+
+a=np.groupby(np.timestamp.cast('date')).agg({'uid':'count'})
+a.cache()
+a.show()
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+Testing done on spark-shell on 139 (2 node cluster) with cassandra on 5 nodes:
+/opt/installs/spark-2.1.0-bin-hadoop2.7/bin/spark-shell --master spark://toimisc42139:7077  --conf spark.cassandra.connection.host=dsciapp43100 --packages datastax:spark-cassandra-connector:2.0.0-RC1-s_2.11
+
+import com.datastax.spark.connector._
+val rdd = sc.cassandraTable("mobiledata", "events")
+println(rdd.count)
+
+total rows in entire Feb data on 5 node cluster
+521407344
+
+Query ran in 1:22 hrs
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+Testing done on pyspark on 139 (2 node cluster) with cassandra on 5 nodes:
+/opt/installs/spark-2.1.0-bin-hadoop2.7/bin/pyspark --master spark://toimisc42139:7077  --conf spark.cassandra.connection.host=dsciapp43100 --packages datastax:spark-cassandra-connector:2.0.0-RC1-s_2.11
+from pyspark.sql import SQLContext
+sql = SQLContext(sc)
+user = sql.read.format("org.apache.spark.sql.cassandra").load(keyspace="mobiledata", table="events")
+>>> a=user.filter(user.appid=='newspoint')
+>>> b=a.select('uid','mevent')
+>>> b.cache()
+>>> b.count()
+17/03/06 23:23:51 WARN MemoryStore: Not enough space to cache rdd_6_0 in memory! (computed 348.0 MB so far)
+73498720
+>>> b.select('mevent').distinct().collect()
+>>> b.registerTempTable("events")
+>>> sql.cacheTable("events")
+>>> x=sql.sql('select uid,sum( case when mevent="read" then 1 else 0 end) as read from events group by uid')
+>>> x.show(10)
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## 6 node spark cluster with 5 node cassandra cluster
+/opt/installs/spark-2.1.0-bin-hadoop2.7/bin/pyspark --master spark://toimisc42139:7077  --conf spark.cassandra.connection.host=dsciapp43100 --packages datastax:spark-cassandra-connector:2.0.0-RC1-s_2.11 --num-executors 17 --executor-cores 5 --executor-memory 19G
+from pyspark.sql import SQLContext
+sql = SQLContext(sc)
+import os
+import subprocess
+os.system("rm /home/chetan.arya/metastore_db/db.lck")
+os.system("rm /home/chetan.arya/metastore_db/dbex.lck")
+os.system("rm /tmp/hsperfdata_chetan.arya/metastore_db/db.lck")
+os.system("rm /tmp/hsperfdata_chetan.arya/metastore_db/dbex.lck")
+user = sql.read.format("org.apache.spark.sql.cassandra").load(keyspace="mobiledata", table="events")
+np=user.select("eventid","acategory","mevent","uid","aurl","screen","network","luser","location").filter((user.appid=='newspoint') & (user['timestamp'].cast('date')>= '2017-02-01') & (user['timestamp'].cast('date') < '2017-03-01'))
+np.explain()
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## 6 node spark cluster with 5 node cassandra cluster in an efficient manner using PySpark
+/opt/installs/spark-2.1.0-bin-hadoop2.7/bin/pyspark --master spark://toimisc42139:7077  --conf spark.cassandra.connection.host=dsciapp43101 --packages datastax:spark-cassandra-connector:2.0.0-RC1-s_2.11 --num-executors 17 --executor-cores 5 --executor-memory 19G
+from pyspark.sql import SQLContext
+sql = SQLContext(sc)
+import os
+import subprocess
+os.system("rm /home/chetan.arya/metastore_db/db.lck")
+os.system("rm /home/chetan.arya/metastore_db/dbex.lck")
+os.system("rm /tmp/hsperfdata_chetan.arya/metastore_db/db.lck")
+os.system("rm /tmp/hsperfdata_chetan.arya/metastore_db/dbex.lck")
+user = sql.read.format("org.apache.spark.sql.cassandra").load(keyspace="mobiledata", table="events").select("eventid","acategory","mevent","uid","aurl","screen","network","luser","location").filter("appid=='newspoint' and eventid > maxTimeuuid('2017-02-27 06:01:00.859000+0000') and eventid < maxTimeuuid('2017-02-27 06:03:00.859000+0000')")
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## 6 node spark cluster with 5 node cassandra cluster in an efficient manner using Spark-shell
+import com.datastax.spark.connector._;
+val sqlContext = new org.apache.spark.sql.SQLContext(sc);
+import sqlContext.implicits._
+import sys.process._
+#val rdd = sc.cassandraTable("mobiledata", "events").select("eventid","acategory","mevent","uid","aurl","screen","network","luser","location","timestamp").where("appid='newspoint' and eventid > maxTimeuuid('2017-02-01 00:05+0000') and eventid < maxTimeuuid('2017-02-01 00:06+0000')")
+#rdd.count()
+#case class tablemap(eventid: String, acategory: String,mevent:String,uid: String,aurl:String,screen:String,network:String,luser:String,location:String,timestamp:String)
+#val rdd1 = rdd.map(r => new tablemap(r.getString("eventid"),r.getString("acategory"),r.getString("mevent"),r.getString("uid"),r.getString("aurl"),r.getString("screen"),r.getString("network"),r.getString("luser"),r.getString("location"),r.getString("timestamp")))
+#case class tablemap(eventid: String, acategory: String,mevent:String,uid: String,aurl:String,screen:String,network:String,luser:String,location:String,timestamp:String)
+#sc.cassandraTable[(String,String,String,String,String,String,String,String,String,String)]("mobiledata", "events").select("eventid","acategory","mevent","uid","aurl","screen","network","luser","location","timestamp").where("appid='newspoint' and eventid > maxTimeuuid('2017-02-01 00:05+0000') and eventid < maxTimeuuid('2017-02-01 00:06+0000')").toDF().registerTempTable("sample")
+#sqlContext.createDataFrame(rdd.map(r => org.apache.spark.sql.Row.fromSeq(r.columnValues)),tablemap)
+#sc.cassandraTable[(eventid: String),(acategory: String),(mevent: String),(uid: String),(aurl: String),(screen: String),(network: String),(luser: String),(location: String),(timestamp: String)]("mobiledata", "events").select("eventid","acategory","mevent","uid","aurl","screen","network","luser","location","timestamp").where("appid='newspoint' and eventid > maxTimeuuid('2017-02-01 00:05+0000') and eventid < maxTimeuuid('2017-02-01 00:06+0000')").toDF().registerTempTable("sample")
+
+val df1=sc.cassandraTable("mobiledata", "events").select("eventid","acategory","mevent","uid","aurl","screen","network","luser","location","timestamp").as((e:String,a:String,m:String,u:String,au:String,s:String,n:String,l:String,lo:String,t:String) => (e,a,m,u,au,s,n,l,lo,t)).where("appid='newspoint' and eventid > maxTimeuuid('2017-02-01 00:00+0000') and eventid < maxTimeuuid('2017-03-01 00:00+0000')").toDF()
+val names=Seq("eventid","acategory","mevent","uid","aurl","screen","network","luser","location","timestamp")
+val df2=df1.toDF(names: _*)
+df2.registerTempTable("sample")
+sqlContext.sql("cache table sample")
+val df3=sqlContext.sql("select * from sample limit 10")
+df3.show()
+df3.printSchema
+import spark.implicits._
+#df3.write.parquet("/home/nitin.jain/data.parquet") 
+import org.apache.spark.sql.functions.lit
+val df4=df3.withColumn("appid",lit("newspoint"))
+#Writing df to cassandra table (writes one rows per partition: hence make a column on which table is unique and add that as a partition key)
+df4.createCassandraTable("nj_test","sample",partitionKeyColumns = Some(Seq("appid")))
+df4.write.format("org.apache.spark.sql.cassandra").options(Map( "table" -> "sample", "keyspace" -> "nj_test")).save()
+#Reading the saved df from cassandra
+val df = sqlContext.read.format("org.apache.spark.sql.cassandra").options(Map( "table" -> "sample", "keyspace" -> "nj_test" )).load()
+
+#26 mins to fetch 73 mn data of feb from cassandra, 12 min for 20 days data of 35 mn
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+lock file error:
+http://db.apache.org/derby/docs/10.4/tuning/rtunproper81405.html
+
+ipython-notebook to run pyspark:
+http://limdauto.github.io/posts/2015-12-24-spark-ipython-notebook.html
+
+#Server side operatins like filtering, selection and groupby to fetch less data from cassandra 
+http://stackoverflow.com/questions/35835876/server-side-filtering-of-spark-cassandra-on-pyspark
+https://github.com/datastax/spark-cassandra-connector/blob/master/doc/3_selection.md
+
+#Setting paramters in spark-default.conf to Achieve parellilism
+http://blog.cloudera.com/blog/2015/03/how-to-tune-your-apache-spark-jobs-part-2/
+http://stackoverflow.com/questions/32621990/what-are-workers-executors-cores-in-spark-standalone-cluster
+https://www.linkedin.com/pulse/spark-job-execution-hierarchy-performance-tuning-ajay-mall
+http://stackoverflow.com/questions/37528047/how-are-stages-split-into-tasks-in-spark
+
+#Can't filter the data which is read from cassandra in pyspark: (although Pushdown happens in dataframe which can do server side filtering but only in simple clauses supported by CQL)
+http://stackoverflow.com/questions/36047157/dataframe-where-clause-doesnt-work-when-use-spark-cassandra-connector
+
+Writing cassanda queries in Spark SQL and ftech data in df: (Not useful as CQL has very limited operations and the package we are using doen't support cassandraSQLcontext)
+http://stackoverflow.com/questions/36173896/unable-to-find-cassandrasqlcontext
+
+#Working in spark Scala/ Data manipulation:
+https://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.sql.functions$
+https://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.sql.DataFrameNaFunctions
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Some DF mainpulations in scala:Analysis- app uninstalls
+
+import org.apache.spark.sql.functions
+val df4=df3.withColumn("mevent2",substring(df3("mevent"),1,3))
+val df3=sqlContext.sql("select uid,substr(timestamp,1,10) as date,max(case when mevent='install' then 1 else 0 end) as install,count(distinct case when mevent='read' then eventid end) as read, count(distinct case when mevent='notification_delivered' then eventid end) as notf_del,count(distinct case when mevent='notification_open' then eventid end) as notf_open,count(distinct case when mevent='publication_changed' then eventid end) as pub_change,count(distinct case when mevent='video/pause' then eventid end) as videp_pause,count(distinct case when mevent='video/play' then eventid end) as video_play,count(distinct case when substr(mevent,1,5)='share' then eventid end) as shared,count(distinct case when mevent='settings_changed' then eventid end) as setting_chg from sample group by uid,substr(timestamp,1,10)")
+df3.createCassandraTable("nj_test","aggregate1",partitionKeyColumns = Some(Seq("uid","date")))
+df3.write.format("org.apache.spark.sql.cassandra").options(Map( "table" -> "aggregate1", "keyspace" -> "nj_test")).save()
+df3.where('luser.isNull).groupBy('luser).count().show()
+df3.filter(isnan($"iuser"))
+#Replacing null values by a value="e"
+val df4=df3.na.fill("e",Seq("acategory"))
+val df3=sqlContext.sql("select count(*) as rows,count(distinct uid) as users,sum(case when acategory='' or acategory is null then 1 else 0 end) as acaegory, sum(case when mevent='' or mevent is null then 1 else 0 end) as mevent,sum(case when aurl='' or aurl is null then 1 else 0 end) as aurl,sum(case when screen='' or screen is null then 1 else 0 end) as screen,sum(case when network='' or network is null then 1 else 0 end) as network,sum(case when luser='' or luser is null then 1 else 0 end) as luser,sum(case when location='' or location is null then 1 else 0 end) as location from sample")
+sqlContext.isCached("sample")
+import org.apache.spark.sql.DataFrameStatFunctions
+val s=df3.stat.crosstab("mevent","network")
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
